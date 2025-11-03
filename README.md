@@ -99,10 +99,10 @@ predictive-handover-ml/
    ```
 4. Use the interface:
 
-   * 🟩 **Select Save Folder** – Choose where to save output files
-   * 🟦 **Run Simulation** – Generate synthetic handover dataset
-   * 🟨 **Train Models** – Train & evaluate ML models
-   * 🟧 **Load Real Data (CSV)** – Import Android measurement logs (optional)
+   *  **Select Save Folder** – Choose where to save output files
+   *  **Run Simulation** – Generate synthetic handover dataset
+   *  **Train Models** – Train & evaluate ML models
+   *  **Load Real Data (CSV)** – Import Android measurement logs (optional)
 
 ---
 
@@ -140,16 +140,5 @@ Random Forest provides better recall and robustness against noisy RSSI readings 
 
 ---
 
-##  References
-
-1. Masri et al., “Machine-Learning-Based Predictive Handover,” *IFIP/IEEE IM 2021*.
-2. Zhang et al., “Machine Learning-Based Handover Failure Prediction Model,” *IEEE CCNC 2023*.
-3. Osei et al., “Adaptation of the Okumura-Hata Model to the Environment of Accra,” *ICCSPN 2019*.
 
 ---
-
-##  Author
-
-**Ashutosh Borthakur**
-Department of Electronics and Communication Engineering
-**Group 17 – Predictive Modelling of Signal Strength and Handover Events**
