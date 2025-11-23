@@ -99,17 +99,15 @@ predictive-handover/
 │
 ├── matlab/
 │   ├── handover_gui.m                # Full GUI application
-│   ├── simulator.m                   # Simulation code (optional)
 │   ├── load_real_data.m              # Real data processing
 │   └── README_matlab.md
 │
 ├── docs/
-│   ├── report.pdf                    # Full academic report (optional)
-│   ├── architecture.png
+│   ├── report.pdf                    # Full academic report
 │   ├── gui_screenshot.png
 │   └── confusion_matrix.png
 │
-└── README.md                         # You are reading this file
+└── README.md                         
 
 ```
 
