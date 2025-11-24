@@ -1,207 +1,262 @@
 function handover_gui
     % ===========================================================
-    % GUI for Predictive Handover Simulation and ML Evaluation
+    % Predictive Handover GUI - Fixed & Improved Version
+    % Fixes: Removed 'lon/lat' error, proper plotting, no overwrites
     % ===========================================================
     close all; clc;
 
     %% --- CREATE MAIN UI FIGURE ---------------------------------------
-    fig = uifigure('Name', 'Predictive Handover GUI', 'Position', [100 100 1150 650]);
+    fig = uifigure('Name', 'Predictive Handover GUI', ...
+        'Position', [100 100 1150 650], 'CloseRequestFcn', @onClose);
 
     % Panels
     ctrlPanel   = uipanel(fig, 'Title', 'Controls', 'Position', [20 350 320 280]);
     plotPanel   = uipanel(fig, 'Title', 'Plots', 'Position', [360 50 750 580]);
-    outputPanel = uipanel(fig, 'Title', 'Output', 'Position', [20 50 320 280]);
+    %outputPanel = uipanel(fig, 'Title', 'Output Metrics', 'Position', [20 50 320 280]);
 
     %% --- CONTROL BUTTONS ---------------------------------------------
     uilabel(ctrlPanel, 'Text', 'Predictive Handover Simulation', ...
-        'FontSize', 12, 'FontWeight', 'bold', 'Position', [40 230 250 25]);
+        'FontSize', 13, 'FontWeight', 'bold', 'Position', [40 230 240 30]);
 
-    % Select Save Folder
     btnFolder = uibutton(ctrlPanel, 'Text', 'Select Save Folder', ...
-        'FontSize', 11, 'Position', [60 220-50 180 35], ...
-        'ButtonPushedFcn', @selectSaveFolder);
+        'Position', [60 170 180 35], 'ButtonPushedFcn', @selectSaveFolder);
 
-    % Run Simulation
     btnSim = uibutton(ctrlPanel, 'Text', 'Run Simulation', ...
-        'FontSize', 11, 'Position', [60 220-100 180 35], ...
-        'ButtonPushedFcn', @runSimulation);
+        'Position', [60 120 180 35], 'ButtonPushedFcn', @runSimulation);
 
-    % Train Models
-    btnTrain = uibutton(ctrlPanel, 'Text', 'Train Models', ...
-        'FontSize', 11, 'Position', [60 220-150 180 35], ...
-        'Enable', 'off', 'ButtonPushedFcn', @trainModels);
+    btnTrain = uibutton(ctrlPanel, 'Text', 'Train & Evaluate Model', ...
+        'Position', [60 70 180 35], 'Enable', 'off', 'ButtonPushedFcn', @trainModels);
 
     % Status
-    uilabel(ctrlPanel, 'Text', 'Status:', ...
-        'Position', [20 50 60 25], 'HorizontalAlignment', 'left', 'FontWeight', 'bold');
-    statusBox = uilabel(ctrlPanel, 'Text', 'Waiting...', ...
-        'Position', [90 50 200 25], 'BackgroundColor', 'w', ...
-        'HorizontalAlignment', 'left');
+    uilabel(ctrlPanel, 'Text', 'Status:', 'Position', [20 20 60 25], ...
+        'FontWeight', 'bold', 'HorizontalAlignment', 'left');
+    statusBox = uilabel(ctrlPanel, 'Text', 'Ready.', ...
+        'Position', [90 10 210 50], 'BackgroundColor', 'white', ...
+        'HorizontalAlignment', 'left', 'WordWrap', 'on');
 
-    %% --- PLOT AXES ----------------------------------------------------
-    ax = uiaxes(plotPanel, 'Position', [50 220 630 320]);
-    title(ax, 'Simulation Output');
+    %% --- PLOT AXES ---------------------------------------------------
+    axSim = uiaxes(plotPanel, 'Position', [70 340 650 220]);
+    title(axSim, 'Simulation: User Path and Connected BS');
+    xlabel(axSim, 'X (km)'); ylabel(axSim, 'Y (km)');
+
+    axModel = uiaxes(plotPanel, 'Position', [70 80 650 220]);
+    title(axModel, 'Model Results - No prediction yet');
+    xlabel(axModel, 'X (km)'); ylabel(axModel, 'Y (km)');
 
     %% --- OUTPUT METRICS ----------------------------------------------
-    uilabel(outputPanel, 'Text', 'Model Performance', ...
-        'FontSize', 12, 'FontWeight', 'bold', 'Position', [70 240 200 25]);
+    %uilabel(outputPanel, 'Text', 'Python XGBoost Model Performance', ...
+     %   'FontSize', 12, 'FontWeight', 'bold', 'Position', [20 230 280 25]);
 
-    metricLabels = {'Accuracy', 'Precision', 'Recall', 'F1-Score'};
-    metricValues = gobjects(1, numel(metricLabels));
+    %metricLabels = {'Accuracy', 'Precision', 'Recall', 'F1-Score'};
+    %metricValues = gobjects(1,4);
+    %yPos = 180;
+    %for i = 1:4
+     %   uilabel(outputPanel, 'Text', [metricLabels{i} ':'], ...
+     %       'Position', [40 yPos 100 25], 'HorizontalAlignment', 'left');
+     %   metricValues(i) = uilabel(outputPanel, 'Text', '-', ...
+     %       'Position', [150 yPos 120 25], 'FontWeight', 'bold', 'FontSize', 12);
+     %   yPos = yPos - 40;
+    %end
 
-    for i = 1:numel(metricLabels)
-        uilabel(outputPanel, 'Text', metricLabels{i}, ...
-            'Position', [40 240 - i*40 100 25], 'HorizontalAlignment', 'left');
-        metricValues(i) = uilabel(outputPanel, 'Text', '-', ...
-            'Position', [160 240 - i*40 100 25], 'FontWeight', 'bold');
+    %% --- SHARED DATA -------------------------------------------------
+    data = struct();
+    data.saveFolder = pwd;
+    data.dataset = [];
+    data.bsPos = [];
+    data.areaSize = 2;
+
+    % Load Python model (handover_model.pkl must be in same folder)
+    pyModel = [];
+    if exist('handover_model.pkl', 'file')
+        try
+            pyModel = py.joblib.load('handover_model.pkl');
+            statusBox.Text = 'Python XGBoost model loaded successfully.';
+        catch ME
+            statusBox.Text = 'Error loading model.';
+            warning(sprintf("Could not load Python model: %s", ME.message));
+
+        end
+    else
+        statusBox.Text = 'handover_model.pkl not found!';
     end
 
-    % Shared data structure
-    data = struct();
-    data.saveFolder = pwd; % default to current working directory
+    %% --- CALLBACKS ---------------------------------------------------
 
-    %% --- CALLBACK: Select Save Folder --------------------------------
     function selectSaveFolder(~,~)
         folder = uigetdir(pwd, 'Select Folder to Save Dataset');
-        if ischar(folder) && folder ~= 0
+        if folder ~= 0
             data.saveFolder = folder;
-            statusBox.Text = sprintf('Save Folder:\n%s', folder);
-        else
-            statusBox.Text = 'Folder selection cancelled.';
+            statusBox.Text = sprintf('Save folder set:\n%s', folder);
         end
     end
 
-    %% --- CALLBACK: Run Simulation ------------------------------------
     function runSimulation(~,~)
-        statusBox.Text = 'Running simulation...';
-        drawnow;
+        statusBox.Text = 'Running simulation...'; drawnow;
 
         % Parameters
         freqMHz = 900; hb = 30; hm = 1.5;
         areaSize = 2; numBS = 4; gridSize = 14;
+        data.areaSize = areaSize;
 
-        % Grid
+        % Grid points
         x = linspace(0, areaSize, gridSize);
-        [yGrid, xGrid] = meshgrid(x, x);
+        [xGrid, yGrid] = meshgrid(x, x);
         positions = [xGrid(:), yGrid(:)];
-        numPoints = size(positions, 1);
 
-        % Base stations
-        rng(1);
-        bsPos = areaSize * rand(numBS, 2);
+        % Base stations (fixed seed for reproducibility)
+        rng(42);
+        bsPos = areaSize * [0.2 0.2; 0.8 0.3; 0.7 0.8; 0.3 0.7];
+        data.bsPos = bsPos;
 
-        % Okumura–Hata model
-        ahm = @(hm, f) (1.1*log10(f)-0.7)*hm - (1.56*log10(f)-0.8);
+        % Okumura-Hata path loss
+        ahm = @(f) (1.1*log10(f)-0.7)*hm - (1.56*log10(f)-0.8);
         Lhata = @(d) 69.55 + 26.16*log10(freqMHz) - 13.82*log10(hb) ...
-            - ahm(hm, freqMHz) + (44.9 - 6.55*log10(hb)) .* log10(d);
+            - ahm(freqMHz) + (44.9 - 6.55*log10(hb)) .* log10(max(d,0.01));
 
-        % RSSI simulation
-        rssiData = zeros(numPoints, numBS);
-        connectedBS = zeros(numPoints,1);
-        for i = 1:numPoints
+        % Compute RSSI and best BS
+        rssiData = zeros(size(positions,1), numBS);
+        connectedBS = zeros(size(positions,1),1);
+
+        for i = 1:size(positions,1)
             for b = 1:numBS
-                d = sqrt(sum((positions(i,:) - bsPos(b,:)).^2));
-                d = max(d, 0.01);
-                L = Lhata(d);
-                txPower = 43;
-                rssiData(i,b) = txPower - L;
+                d = norm(positions(i,:) - bsPos(b,:));
+                rssiData(i,b) = 43 - Lhata(d);  % TxPower = 43 dBm
             end
             [~, connectedBS(i)] = max(rssiData(i,:));
         end
-        handover = [0; diff(connectedBS) ~= 0];
+
+        handover = [false; diff(connectedBS) ~= 0];
 
         % Create dataset
         varNames = [{'X_km','Y_km','ConnectedBS','Handover'}, ...
             arrayfun(@(i) sprintf('RSSI_BS%d',i), 1:numBS, 'UniformOutput', false)];
-        dataset = array2table([positions, connectedBS, handover, rssiData], ...
+        dataset = array2table([positions, connectedBS, double(handover), rssiData], ...
             'VariableNames', varNames);
 
-        % --- Save dataset to user-chosen folder ---
+        % Save
         filePath = fullfile(data.saveFolder, 'handover_dataset.csv');
         try
             writetable(dataset, filePath);
-            statusBox.Text = sprintf('Simulation complete!\nSaved to:\n%s', filePath);
-        catch ME
-            warning(ME.message);
-            altPath = fullfile(tempdir, 'handover_dataset.csv');
-            writetable(dataset, altPath);
-            statusBox.Text = sprintf('Saved to temp:\n%s', altPath);
+            statusBox.Text = sprintf('Simulation done!\nSaved:\n%s', filePath);
+        catch
+            filePath = fullfile(pwd, 'handover_dataset.csv');
+            writetable(dataset, filePath);
+            statusBox.Text = sprintf('Saved to current folder:\n%s', filePath);
         end
 
-        btnTrain.Enable = 'on';
         data.dataset = dataset;
+        btnTrain.Enable = 'on';
 
-        % Visualization
-        cla(ax);
-        scatter(ax, positions(:,1), positions(:,2), 40, connectedBS, 'filled');
-        hold(ax, 'on');
-        scatter(ax, bsPos(:,1), bsPos(:,2), 120, 'kp', 'filled');
-        title(ax, 'User Path and Connected BS');
-        xlabel(ax, 'X (km)'); ylabel(ax, 'Y (km)');
-        legend(ax, 'User Points', 'Base Stations');
-        grid(ax, 'on');
+        % --- Plot Simulation (Connected BS) ---
+        cla(axSim);
+        scatter(axSim, positions(:,1), positions(:,2), 50, connectedBS, 'filled');
+        hold(axSim, 'on');
+        scatter(axSim, bsPos(:,1), bsPos(:,2), 200, 'kp', 'filled', ...
+            'MarkerFaceColor', 'yellow', 'MarkerEdgeColor', 'k', 'LineWidth', 1.5);
+        hold(axSim, 'off');
+        title(axSim, 'Simulation: Connected Base Station per Grid Point');
+        xlabel(axSim, 'X (km)'); ylabel(axSim, 'Y (km)');
+        colormap(axSim, lines(numBS));
+        colorbar(axSim, 'Ticks', 1:numBS, 'TickLabels', arrayfun(@(x)sprintf('BS%d',x),1:numBS,'UniformOutput',false));
+        grid(axSim, 'on'); axis(axSim, [0 areaSize 0 areaSize]);
+        legend(axSim, 'Grid Points', 'Base Stations', 'Location', 'northwest');
+
+        % --- Placeholder for Model Results ---
+        cla(axModel);
+        title(axModel, 'Model Results - Click "Train & Evaluate Model"');
+        text(axModel, 0.5, 0.5, 'No prediction yet', 'Units', 'normalized', ...
+            'HorizontalAlignment', 'center', 'FontSize', 16, 'Color', [0.6 0.6 0.6]);
+        axis(axModel, [0 areaSize 0 areaSize]);
+        grid(axModel, 'on');
     end
 
-    %% --- CALLBACK: Train Models --------------------------------------
     function trainModels(~,~)
-        if ~isfield(data, 'dataset')
+        if isempty(data.dataset)
             statusBox.Text = 'Run simulation first!';
             return;
         end
+
+        statusBox.Text = 'Evaluating Python XGBoost model...'; drawnow;
+
         dataset = data.dataset;
-        statusBox.Text = 'Training models...'; drawnow;
 
-        % Features and labels
-        features = dataset(:, startsWith(dataset.Properties.VariableNames, 'RSSI') | ...
-            strcmp(dataset.Properties.VariableNames, 'X_km') | strcmp(dataset.Properties.VariableNames, 'Y_km'));
-        X = table2array(features);
-        y = dataset.Handover;
+        % --- Map to real-world-like features (same as Python training) ---
+        lat0 = 15.3920; lon0 = 73.8810;
+        lat = lat0 + dataset.Y_km * 0.009;   % rough km → degree
+        lon = lon0 + dataset.X_km * 0.009;
 
-        % Split
-        cv = cvpartition(y, 'HoldOut', 0.3);
-        X_train = X(training(cv), :);
-        y_train = y(training(cv));
-        X_test = X(test(cv), :);
-        y_test = y(test(cv));
+        % Extract strongest RSSI (the one from connected BS)
+        rssi = zeros(height(dataset),1);
+        for i = 1:height(dataset)
+            bs = dataset.ConnectedBS(i);
+            rssi(i) = dataset{i, 4 + bs};  % columns 5–8 are RSSI_BS1..4
+        end
 
-        % Logistic Regression
-        logModel = fitglm(X_train, y_train, 'Distribution', 'binomial', 'Link', 'logit');
-        y_pred_log = round(predict(logModel, X_test));
+        % Synthetic features (same distribution as real data)
+        speed    = 2 + 8*rand(height(dataset),1);      % 2–10 m/s
+        altitude = -25 + 15*rand(height(dataset),1);    % -25 to -10 m
 
-        % Random Forest
-        rfModel = TreeBagger(100, X_train, y_train, ...
-            'Method', 'classification', 'OOBPrediction', 'On', ...
-            'OOBPredictorImportance', 'On');
-        [y_pred_rf, ~] = predict(rfModel, X_test);
-        y_pred_rf = str2double(y_pred_rf);
+        X_py = [lon, lat, rssi, speed, altitude];
+        y_true = dataset.Handover;
 
-        % Evaluate metrics (using Random Forest)
-        conf = confusionmat(y_test, y_pred_rf);
-        acc = mean(y_pred_rf == y_test);
-        prec = conf(2,2)/sum(conf(:,2));
-        rec = conf(2,2)/sum(conf(2,:));
-        f1 = 2*(prec*rec)/(prec+rec);
+        if isempty(pyModel)
+            statusBox.Text = 'Python model not available!';
+            return;
+        end
+
+        % --- Predict on ALL points for visualization ---
+        py_X_all = py.numpy.array(X_py);
+        py_pred_all = pyModel.predict(py_X_all);
+        y_pred_all = double(py_pred_all);
+
+        % --- Train/test split for metrics ---
+        cv = cvpartition(y_true, 'HoldOut', 0.3);
+        idx_train = training(cv);
+        idx_test  = test(cv);
+
+        py_X_test = py.numpy.array(X_py(idx_test,:));
+        py_pred_test = pyModel.predict(py_X_test);
+        y_pred_test = double(py_pred_test);
+        y_test = y_true(idx_test);
+
+        % --- Metrics ---
+        conf = confusionmat(y_test, y_pred_test);
+        tp = conf(2,2); fp = conf(1,2); fn = conf(2,1); tn = conf(1,1);
+        acc  = (tp + tn) / sum(conf(:));
+        prec = tp / (tp + fp); if isnan(prec), prec = 0; end
+        rec  = tp / (tp + fn); if isnan(rec),  rec  = 0; end
+        f1   = 2*prec*rec/(prec+rec); if isnan(f1), f1 = 0; end
 
         % Update GUI
         metricValues(1).Text = sprintf('%.2f%%', acc*100);
-        metricValues(2).Text = sprintf('%.2f', prec);
-        metricValues(3).Text = sprintf('%.2f', rec);
-        metricValues(4).Text = sprintf('%.2f', f1);
-        statusBox.Text = 'Training complete!';
+        metricValues(2).Text = sprintf('%.3f', prec);
+        metricValues(3).Text = sprintf('%.3f', rec);
+        metricValues(4).Text = sprintf('%.3f', f1);
 
-        % Plots
-        figure('Name','Confusion Matrices');
-        subplot(1,2,1);
-        confusionchart(confusionmat(y_test, y_pred_log), {'No Handover','Handover'});
-        title('Logistic Regression');
-        subplot(1,2,2);
-        confusionchart(conf, {'No Handover','Handover'});
-        title('Random Forest');
+        % --- Plot Predicted Handover Regions ---
+        cla(axModel);
+        scatter(axModel, dataset.X_km, dataset.Y_km, 50, y_pred_all, 'filled');
+        hold(axModel, 'on');
+        scatter(axModel, data.bsPos(:,1), data.bsPos(:,2), 200, 'kp', 'filled', ...
+            'MarkerFaceColor', 'yellow', 'MarkerEdgeColor', 'k', 'LineWidth', 1.5);
+        hold(axModel, 'off');
 
-        figure('Name','Feature Importance');
-        bar(rfModel.OOBPermutedPredictorDeltaError);
-        set(gca, 'XTickLabel', features.Properties.VariableNames, 'XTickLabelRotation', 45);
-        title('Random Forest Feature Importance');
-        ylabel('Δ Error'); grid on;
+        title(axModel, 'Predicted Handover Regions (Python XGBoost)');
+        xlabel(axModel, 'X (km)'); ylabel(axModel, 'Y (km)');
+        colormap(axModel, [0.2 0.8 0.2; 0.9 0.2 0.2]);  % Green = No HO, Red = HO
+        cbar = colorbar(axModel, 'Ticks', [0.25 0.75], 'TickLabels', {'No Handover', 'Handover'});
+        grid(axModel, 'on'); axis(axModel, [0 data.areaSize 0 data.areaSize]);
+
+        % --- Confusion Matrix in separate window ---
+        %fig_cm = figure('Name', 'Confusion Matrix - Python XGBoost', 'NumberTitle', 'off');
+        %confusionchart(y_test, y_pred_test, 'RowSummary','row-normalized', ...
+         %   'ColumnSummary','column-normalized');
+        %title('Python XGBoost on Simulated Data');
+
+        statusBox.Text = sprintf('Evaluation complete!');
+    end
+
+    function onClose(~,~)
+        delete(fig);
     end
 end

@@ -106,7 +106,7 @@ predictive-handover-ml/
 
 ---
 
-## 📊 Preliminary Results
+##  Preliminary Results
 
 | Model               | Accuracy | Precision | Recall | F1-Score |
 | ------------------- | -------- | --------- | ------ | -------- |
@@ -153,6 +153,3 @@ Random Forest provides better recall and robustness against noisy RSSI readings 
 **Ashutosh Borthakur**
 Department of Electronics and Communication Engineering
 **Group 17 – Predictive Modelling of Signal Strength and Handover Events**
-
-
-**Note:** This is a midsemester deliverable. The complete project will include real-world data collection and advanced model optimization.
